@@ -1,10 +1,12 @@
 import asyncio
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import logging
 import os
 import re
 import sqlite3
 import tempfile
+import threading
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -57,6 +59,25 @@ BASE_FRIEND_PERSONA = os.environ.get(
 )
 
 client = genai.Client(api_key=GEMINI_API_KEY)
+
+
+class _HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+
+def start_health_server() -> None:
+    port = int(os.environ.get("PORT", "10000"))
+    server = ThreadingHTTPServer(("0.0.0.0", port), _HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    logger.info("Health server listening on port %s", port)
 
 
 def init_db() -> None:
@@ -454,6 +475,7 @@ def main() -> None:
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
+    start_health_server()
 
     init_db()
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
